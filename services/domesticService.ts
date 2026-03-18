@@ -139,6 +139,34 @@ export const translateText = async (text: string, from: string, to: string): Pro
 /**
  * iFlytek Real-time ASR (IAT)
  */
+const IFLYTEK_LANG_MAP: Record<string, string> = {
+  'en': 'en_us',
+  'zh': 'zh_cn',
+  'ja': 'ja_jp',
+  'ko': 'ko_kr',
+  'th': 'th_th',
+  'vi': 'vi_vn',
+  'id': 'id_id',
+  'ms': 'ms_my',
+  'es': 'es_es',
+  'fr': 'fr_fr',
+  'de': 'de_de',
+};
+
+const IFLYTEK_VCN_MAP: Record<string, string> = {
+  'en': 'catherine',
+  'zh': 'xiaoyan',
+  'ja': 'nana',
+  'ko': 'hana',
+  'th': 'th_th', // iFlytek Thai support might vary, using code as fallback if vcn not known
+  'vi': 'vi_vn',
+  'id': 'id_id',
+  'ms': 'ms_my',
+  'es': 'lucy',
+  'fr': 'mariane',
+  'de': 'karl',
+};
+
 export class DomesticASR {
   private socket: WebSocket | null = null;
   private onResult: (text: string) => void;
@@ -206,7 +234,7 @@ export class DomesticASR {
     const frame = {
       common: this.status === 0 ? { app_id: IFLYTEK_APP_ID } : undefined,
       business: this.status === 0 ? {
-        language: this.langCode === 'en' ? "en_us" : "zh_cn",
+        language: IFLYTEK_LANG_MAP[this.langCode] || "zh_cn",
         domain: "iat",
         accent: "mandarin",
         vad_eos: 1000, 
@@ -253,11 +281,11 @@ export const generateSpeech = async (text: string, language: string): Promise<st
       const frame = {
         common: { app_id: IFLYTEK_APP_ID },
         business: {
-          aue: "raw",
-          auf: "audio/L16;rate=16000",
-          vcn: language.toLowerCase().includes('english') ? "catherine" : "xiaoyan",
-          tte: "UTF8"
-        },
+        aue: "raw",
+        auf: "audio/L16;rate=16000",
+        vcn: IFLYTEK_VCN_MAP[language] || "xiaoyan",
+        tte: "utf8",
+      },
         data: {
           status: 2,
           text: encode(new TextEncoder().encode(text))

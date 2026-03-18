@@ -1,25 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { TranslationMode, Language } from './types';
-import { LANGUAGES } from './constants';
+import { LANGUAGES, UI_STRINGS, LANGUAGE_LOCAL_NAMES } from './constants';
 import { translateText, translateTextStream, generateSpeech, playPCM, DomesticASR } from './services/domesticService';
 import * as OpenCC from 'opencc-js';
 
 // Initialize converter: Traditional (hk/tw) -> Simplified (cn)
 const converter = OpenCC.Converter({ from: 'hk', to: 'cn' });
 
-const UI_STRINGS: Record<string, { listening: string, waiting: string, noInput: string }> = {
-  en: { listening: "Listening...", waiting: "Waiting...", noInput: "No voice input was detected." },
-  zh: { listening: "正在聆听...", waiting: "等待中...", noInput: "未检测到语音输入。" },
-  ja: { listening: "聴いています...", waiting: "待機中...", noInput: "音声入力が検出されませんでした。" },
-  ko: { listening: "듣고 있습니다...", waiting: "대기 중...", noInput: "음성 입력이 감지되지 않았습니다." },
-  th: { listening: "กำลังฟัง...", waiting: "กำลังรอ...", noInput: "ไม่พบการป้อนข้อมูลด้วยเสียง" },
-  vi: { listening: "Đang nghe...", waiting: "Đang chờ...", noInput: "Không phát hiện thấy đầu vào giọng nói." },
-  id: { listening: "Mendengarkan...", waiting: "Menunggu...", noInput: "Masukan suara tidak terdeteksi." },
-  ms: { listening: "Mendengar...", waiting: "Menunggu...", noInput: "Tiada input suara dikesan." },
-  es: { listening: "Escuchando...", waiting: "Esperando...", noInput: "No se detectó entrada de voz." },
-  fr: { listening: "Écoute...", waiting: "En attente...", noInput: "Aucune entrée vocale n'a été détectée." },
-  de: { listening: "Hören...", waiting: "Warten...", noInput: "Es wurde keine Spracheingabe erkannt." }
-};
+// Removed local UI_STRINGS as they are now in constants.ts
 
 const App: React.FC = () => {
   const [mode, setMode] = useState<TranslationMode>(TranslationMode.SOLO);
@@ -99,11 +87,11 @@ const App: React.FC = () => {
     }
   };
 
-  const handlePlayAudio = async (text: string, lang: string) => {
+  const handlePlayAudio = async (text: string, langCode: string) => {
     if (!text || isPlaying) return;
     setIsPlaying(true);
     try {
-      const audio = await generateSpeech(text, lang);
+      const audio = await generateSpeech(text, langCode);
       await playPCM(audio);
     } catch (e) {
       console.error("Audio playback failed", e);
@@ -305,12 +293,15 @@ const App: React.FC = () => {
     }, 100);
   };
 
+  const strings = UI_STRINGS[inputLang.code] || UI_STRINGS.en;
+  const localNames = LANGUAGE_LOCAL_NAMES[inputLang.code] || LANGUAGE_LOCAL_NAMES.en;
+
   const LanguageModal = ({ active, onSelect, onClose }: { active: Language, onSelect: (l: Language) => void, onClose: () => void }) => (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
       <div className="absolute inset-0 bg-primary/40 backdrop-blur-md" onClick={onClose}></div>
       <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden border border-slate-100 dark:border-slate-800">
         <div className="p-8 border-b border-slate-50 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/50">
-          <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-primary dark:text-accent">Select Language</h3>
+          <h3 className="text-[10px] font-black uppercase tracking-[0.4em] text-primary dark:text-accent">{strings.selectLang}</h3>
           <button onClick={onClose} className="text-slate-400 hover:text-primary"><span className="material-icons-outlined">close</span></button>
         </div>
         <div className="max-h-[60vh] overflow-y-auto p-4 grid grid-cols-1 gap-2">
@@ -321,7 +312,7 @@ const App: React.FC = () => {
               className={`flex items-center space-x-4 p-4 rounded-2xl transition-all ${active.code === l.code ? 'bg-primary text-white shadow-lg' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
             >
               <img src={l.flag} alt={`${l.name} flag`} className="w-8 h-auto rounded-md shadow-sm object-cover" />
-              <span className="font-bold flex-grow text-left">{l.name}</span>
+              <span className="font-bold flex-grow text-left">{localNames[l.code] || l.name}</span>
               {active.code === l.code && <span className="material-icons-outlined text-sm">check_circle</span>}
             </button>
           ))}
@@ -344,7 +335,7 @@ const App: React.FC = () => {
               <img src="/hilton-logo.png" alt="Hilton Logo" className="h-14 sm:h-20 w-auto transition-all" />
             </div>
             {/* Body text-sm (14px) -> Headline 3x = 42px. Desktop text-base (16px) -> Headline 3x = 48px (text-5xl) */}
-            <h1 className="text-white font-display text-3xl leading-tight sm:text-5xl font-bold tracking-widest uppercase opacity-100 mt-2 sm:mt-4 break-words">AI Translator</h1>
+            <h1 className="text-white font-display text-3xl leading-tight sm:text-5xl font-bold tracking-widest uppercase opacity-100 mt-2 sm:mt-4 break-words">{strings.title}</h1>
           </div>
         </header>
       )}
@@ -353,8 +344,8 @@ const App: React.FC = () => {
 
         {mode !== TranslationMode.CONVERSATION && (
           <div className="bg-white dark:bg-slate-900 rounded-2xl p-1 shadow-xl border border-slate-100 dark:border-slate-800 mb-4 sm:mb-6 flex max-w-[240px] mx-auto w-full sticky top-2 z-20">
-            <button onClick={() => handleModeChange(TranslationMode.SOLO)} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mode === TranslationMode.SOLO ? 'bg-primary text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>Solo</button>
-            <button onClick={() => handleModeChange(TranslationMode.CONVERSATION)} className="flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-slate-400 hover:text-slate-600">Bridge</button>
+            <button onClick={() => handleModeChange(TranslationMode.SOLO)} className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${mode === TranslationMode.SOLO ? 'bg-primary text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>{strings.solo}</button>
+            <button onClick={() => handleModeChange(TranslationMode.CONVERSATION)} className="flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all text-slate-400 hover:text-slate-600">{strings.bridge}</button>
           </div>
         )}
 
@@ -372,7 +363,7 @@ const App: React.FC = () => {
               <div className="bg-primary rounded-[2rem] p-6 shadow-2xl animate-in slide-in-from-top-4 duration-500 relative overflow-hidden group">
                 <div className="absolute -left-8 -bottom-8 w-32 h-32 bg-accent/10 rounded-full blur-3xl"></div>
                 <div className="flex justify-between items-center mb-4 relative z-10">
-                  <span className="text-white text-[10px] font-black uppercase tracking-[0.2em]">To: {outputLang.name}</span>
+                  <span className="text-white text-[10px] font-black uppercase tracking-[0.2em]">{strings.to}: {localNames[outputLang.code] || outputLang.name}</span>
                   <button
                     disabled={isProcessing || isPlaying || !translation}
                     onClick={() => handlePlayAudio(translation, outputLang.name)}
@@ -386,7 +377,7 @@ const App: React.FC = () => {
                 <div className="relative z-10">
                   {isProcessing && !translation ? (
                     <div className="flex items-center space-x-2 text-white/50 italic py-4">
-                      <span className="text-xs font-bold uppercase tracking-widest">Translating…</span>
+                      <span className="text-xs font-bold uppercase tracking-widest">{strings.waiting}</span>
                     </div>
                   ) : (
                     <div
@@ -404,18 +395,18 @@ const App: React.FC = () => {
 
               <div className="flex items-center justify-between mb-6 relative z-10">
                 <button onClick={() => setShowInputPicker(true)} className="flex-1 text-center group">
-                  <p className="text-[9px] uppercase font-bold tracking-[0.2em] text-slate-400 mb-1 group-hover:text-accent transition-colors">From</p>
+                  <p className="text-[9px] uppercase font-bold tracking-[0.2em] text-slate-400 mb-1 group-hover:text-accent transition-colors">{strings.from}</p>
                   <div className="flex flex-col items-center">
-                    <span className="text-primary dark:text-accent font-black text-sm sm:text-base underline decoration-accent/30 underline-offset-4 group-hover:decoration-accent transition-all">{inputLang.name}</span>
+                    <span className="text-primary dark:text-accent font-black text-sm sm:text-base underline decoration-accent/30 underline-offset-4 group-hover:decoration-accent transition-all">{localNames[inputLang.code] || inputLang.name}</span>
                   </div>
                 </button>
                 <button onClick={handleSwap} className="w-10 h-10 rounded-full bg-slate-50 dark:bg-slate-800 text-accent flex items-center justify-center hover:rotate-180 transition-transform duration-500 shadow-inner mx-2">
                   <span className="material-icons-outlined text-xl">swap_horiz</span>
                 </button>
                 <button onClick={() => setShowOutputPicker(true)} className="flex-1 text-center group">
-                  <p className="text-[9px] uppercase font-bold tracking-[0.2em] text-slate-400 mb-1 group-hover:text-accent transition-colors">To</p>
+                  <p className="text-[9px] uppercase font-bold tracking-[0.2em] text-slate-400 mb-1 group-hover:text-accent transition-colors">{strings.to}</p>
                   <div className="flex flex-col items-center">
-                    <span className="text-primary dark:text-accent font-black text-sm sm:text-base underline decoration-accent/30 underline-offset-4 group-hover:decoration-accent transition-all">{outputLang.name}</span>
+                    <span className="text-primary dark:text-accent font-black text-sm sm:text-base underline decoration-accent/30 underline-offset-4 group-hover:decoration-accent transition-all">{localNames[outputLang.code] || outputLang.name}</span>
                   </div>
                 </button>
               </div>
@@ -430,13 +421,13 @@ const App: React.FC = () => {
                     transcriptRef.current = val;
                   }}
                   onKeyDown={handleKeyDown}
-                  placeholder={activeSpeaker ? `Listening...` : `Speak or type...`}
+                  placeholder={activeSpeaker ? strings.listening : strings.placeholder}
                   className="w-full h-80 sm:h-96 bg-slate-50/50 dark:bg-slate-800/30 rounded-3xl p-5 pb-28 border-2 border-dashed border-slate-100 dark:border-slate-800 transition-all text-slate-700 dark:text-slate-200 text-lg sm:text-xl font-medium leading-relaxed resize-none focus:border-accent focus:ring-0 focus:bg-white dark:focus:bg-slate-800 shadow-inner"
                 />
                 {!transcript && !activeSpeaker && (
                   <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-20 pb-20">
                     <span className="material-icons-outlined text-4xl mb-2">keyboard_voice</span>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-center">Tap Mic</p>
+                    <p className="text-[9px] font-black uppercase tracking-widest text-center">{strings.tapMic}</p>
                   </div>
                 )}
                 {preparingSpeaker === 'host' && (
@@ -486,7 +477,7 @@ const App: React.FC = () => {
             <div className="flex-1 rotate-180 bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-xl relative overflow-hidden flex flex-col items-center justify-center p-6 border border-slate-200 dark:border-slate-800">
               {/* Guest Language Label (Top-Left from Guest perspective) */}
               <div className="w-full flex justify-between items-center pb-4 pointer-events-none">
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{outputLang.name}</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{localNames[outputLang.code] || outputLang.name}</span>
                 {preparingSpeaker === 'guest' && (
                   <div className="flex items-center space-x-1.5 bg-yellow-400/10 text-yellow-500 px-2.5 py-1 rounded-full border border-yellow-400/30 shadow-sm backdrop-blur-sm">
                     <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
@@ -504,7 +495,7 @@ const App: React.FC = () => {
               <div className="flex-grow w-full overflow-y-auto custom-scrollbar flex flex-col">
                 <div
                   className="my-auto mx-auto font-black text-primary dark:text-white leading-tight text-left break-words max-w-[90%] transition-all duration-300 text-2xl sm:text-4xl"
-                  dangerouslySetInnerHTML={{ __html: translation || (activeSpeaker === 'guest' ? (UI_STRINGS[outputLang.code]?.listening || "Listening...") : (activeSpeaker === 'host' ? (UI_STRINGS[outputLang.code]?.waiting || "Waiting...") : "")) }}
+                  dangerouslySetInnerHTML={{ __html: translation || (activeSpeaker === 'guest' ? strings.listening : (activeSpeaker === 'host' ? strings.waiting : "")) }}
                 />
               </div>
 
@@ -540,7 +531,7 @@ const App: React.FC = () => {
                 className="bg-primary text-white px-6 py-2 rounded-full shadow-xl transform hover:scale-105 transition-all pointer-events-auto flex items-center gap-2 border-2 border-slate-100 dark:border-slate-900"
               >
                 <span className="material-icons-outlined text-lg">close</span>
-                <span className="text-[10px] font-black uppercase tracking-widest">Back</span>
+                <span className="text-[10px] font-black uppercase tracking-widest">{strings.back}</span>
               </button>
             </div>
 
@@ -548,7 +539,7 @@ const App: React.FC = () => {
             <div className="flex-1 bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-xl relative overflow-hidden flex flex-col items-center justify-center p-6 border border-slate-200 dark:border-slate-800">
               {/* Host Language Label (Top-Left) */}
               <div className="w-full flex justify-between items-center pb-4 pointer-events-none">
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{inputLang.name}</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{localNames[inputLang.code] || inputLang.name}</span>
                 {preparingSpeaker === 'host' && (
                   <div className="flex items-center space-x-1.5 bg-yellow-400/10 text-yellow-500 px-2.5 py-1 rounded-full border border-yellow-400/30 shadow-sm backdrop-blur-sm">
                     <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
@@ -565,7 +556,7 @@ const App: React.FC = () => {
 
               <div className="flex-grow w-full overflow-y-auto custom-scrollbar flex flex-col">
                 <div className="my-auto mx-auto font-black text-primary dark:text-white leading-tight text-left break-words max-w-[90%] transition-all duration-300 text-2xl sm:text-4xl">
-                  {transcript || (activeSpeaker === 'host' ? (UI_STRINGS[inputLang.code]?.listening || "Listening...") : (activeSpeaker === 'guest' ? (UI_STRINGS[inputLang.code]?.waiting || "Waiting...") : "Tap Mic to Speak"))}
+                  {transcript || (activeSpeaker === 'host' ? strings.listening : (activeSpeaker === 'guest' ? strings.waiting : strings.tapMicToSpeak))}
                 </div>
               </div>
 
