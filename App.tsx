@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { TranslationMode, Language } from './types';
-import { LANGUAGES, UI_STRINGS, LANGUAGE_LOCAL_NAMES } from './constants';
+import { LANGUAGES, UI_STRINGS } from './constants';
 import { translateText, translateTextStream, generateSpeech, playPCM, DomesticASR } from './services/domesticService';
 import * as OpenCC from 'opencc-js';
 
@@ -294,7 +294,6 @@ const App: React.FC = () => {
   };
 
   const strings = UI_STRINGS[inputLang.code] || UI_STRINGS.en;
-  const localNames = LANGUAGE_LOCAL_NAMES[inputLang.code] || LANGUAGE_LOCAL_NAMES.en;
 
   const LanguageModal = ({ active, onSelect, onClose }: { active: Language, onSelect: (l: Language) => void, onClose: () => void }) => (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
@@ -312,7 +311,7 @@ const App: React.FC = () => {
               className={`flex items-center space-x-4 p-4 rounded-2xl transition-all ${active.code === l.code ? 'bg-primary text-white shadow-lg' : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'}`}
             >
               <img src={l.flag} alt={`${l.name} flag`} className="w-8 h-auto rounded-md shadow-sm object-cover" />
-              <span className="font-bold flex-grow text-left">{localNames[l.code] || l.name}</span>
+              <span className="font-bold flex-grow text-left">{l.name}</span>
               {active.code === l.code && <span className="material-icons-outlined text-sm">check_circle</span>}
             </button>
           ))}
@@ -363,7 +362,7 @@ const App: React.FC = () => {
               <div className="bg-primary rounded-[2rem] p-6 shadow-2xl animate-in slide-in-from-top-4 duration-500 relative overflow-hidden group">
                 <div className="absolute -left-8 -bottom-8 w-32 h-32 bg-accent/10 rounded-full blur-3xl"></div>
                 <div className="flex justify-between items-center mb-4 relative z-10">
-                  <span className="text-white text-[10px] font-black uppercase tracking-[0.2em]">{strings.to}: {localNames[outputLang.code] || outputLang.name}</span>
+                  <span className="text-white text-[10px] font-black uppercase tracking-[0.2em]">{strings.to}: {outputLang.name}</span>
                   <button
                     disabled={isProcessing || isPlaying || !translation}
                     onClick={() => handlePlayAudio(translation, outputLang.name)}
@@ -397,7 +396,7 @@ const App: React.FC = () => {
                 <button onClick={() => setShowInputPicker(true)} className="flex-1 text-center group">
                   <p className="text-[9px] uppercase font-bold tracking-[0.2em] text-slate-400 mb-1 group-hover:text-accent transition-colors">{strings.from}</p>
                   <div className="flex flex-col items-center">
-                    <span className="text-primary dark:text-accent font-black text-sm sm:text-base underline decoration-accent/30 underline-offset-4 group-hover:decoration-accent transition-all">{localNames[inputLang.code] || inputLang.name}</span>
+                    <span className="text-primary dark:text-accent font-black text-sm sm:text-base underline decoration-accent/30 underline-offset-4 group-hover:decoration-accent transition-all">{inputLang.name}</span>
                   </div>
                 </button>
                 <button onClick={handleSwap} className="w-10 h-10 rounded-full bg-slate-50 dark:bg-slate-800 text-accent flex items-center justify-center hover:rotate-180 transition-transform duration-500 shadow-inner mx-2">
@@ -406,7 +405,7 @@ const App: React.FC = () => {
                 <button onClick={() => setShowOutputPicker(true)} className="flex-1 text-center group">
                   <p className="text-[9px] uppercase font-bold tracking-[0.2em] text-slate-400 mb-1 group-hover:text-accent transition-colors">{strings.to}</p>
                   <div className="flex flex-col items-center">
-                    <span className="text-primary dark:text-accent font-black text-sm sm:text-base underline decoration-accent/30 underline-offset-4 group-hover:decoration-accent transition-all">{localNames[outputLang.code] || outputLang.name}</span>
+                    <span className="text-primary dark:text-accent font-black text-sm sm:text-base underline decoration-accent/30 underline-offset-4 group-hover:decoration-accent transition-all">{outputLang.name}</span>
                   </div>
                 </button>
               </div>
@@ -477,7 +476,7 @@ const App: React.FC = () => {
             <div className="flex-1 rotate-180 bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-xl relative overflow-hidden flex flex-col items-center justify-center p-6 border border-slate-200 dark:border-slate-800">
               {/* Guest Language Label (Top-Left from Guest perspective) */}
               <div className="w-full flex justify-between items-center pb-4 pointer-events-none">
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{localNames[outputLang.code] || outputLang.name}</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{outputLang.name}</span>
                 {preparingSpeaker === 'guest' && (
                   <div className="flex items-center space-x-1.5 bg-yellow-400/10 text-yellow-500 px-2.5 py-1 rounded-full border border-yellow-400/30 shadow-sm backdrop-blur-sm">
                     <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
@@ -539,7 +538,7 @@ const App: React.FC = () => {
             <div className="flex-1 bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-xl relative overflow-hidden flex flex-col items-center justify-center p-6 border border-slate-200 dark:border-slate-800">
               {/* Host Language Label (Top-Left) */}
               <div className="w-full flex justify-between items-center pb-4 pointer-events-none">
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{localNames[inputLang.code] || inputLang.name}</span>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">{inputLang.name}</span>
                 {preparingSpeaker === 'host' && (
                   <div className="flex items-center space-x-1.5 bg-yellow-400/10 text-yellow-500 px-2.5 py-1 rounded-full border border-yellow-400/30 shadow-sm backdrop-blur-sm">
                     <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
