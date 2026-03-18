@@ -7,6 +7,20 @@ import * as OpenCC from 'opencc-js';
 // Initialize converter: Traditional (hk/tw) -> Simplified (cn)
 const converter = OpenCC.Converter({ from: 'hk', to: 'cn' });
 
+const UI_STRINGS: Record<string, { listening: string, waiting: string, noInput: string }> = {
+  en: { listening: "Listening...", waiting: "Waiting...", noInput: "No voice input was detected." },
+  zh: { listening: "正在聆听...", waiting: "等待中...", noInput: "未检测到语音输入。" },
+  ja: { listening: "聴いています...", waiting: "待機中...", noInput: "音声入力が検出されませんでした。" },
+  ko: { listening: "듣고 있습니다...", waiting: "대기 중...", noInput: "음성 입력이 감지되지 않았습니다." },
+  th: { listening: "กำลังฟัง...", waiting: "กำลังรอ...", noInput: "ไม่พบการป้อนข้อมูลด้วยเสียง" },
+  vi: { listening: "Đang nghe...", waiting: "Đang chờ...", noInput: "Không phát hiện thấy đầu vào giọng nói." },
+  id: { listening: "Mendengarkan...", waiting: "Menunggu...", noInput: "Masukan suara tidak terdeteksi." },
+  ms: { listening: "Mendengar...", waiting: "Menunggu...", noInput: "Tiada input suara dikesan." },
+  es: { listening: "Escuchando...", waiting: "Esperando...", noInput: "No se detectó entrada de voz." },
+  fr: { listening: "Écoute...", waiting: "En attente...", noInput: "Aucune entrée vocale n'a été détectée." },
+  de: { listening: "Hören...", waiting: "Warten...", noInput: "Es wurde keine Spracheingabe erkannt." }
+};
+
 const App: React.FC = () => {
   const [mode, setMode] = useState<TranslationMode>(TranslationMode.SOLO);
   const [inputLang, setInputLang] = useState<Language>(LANGUAGES[0]);
@@ -202,9 +216,18 @@ const App: React.FC = () => {
 
   // Extracted translation logic to support both Voice stop and specific Text submit
   const handleTranslation = async (text: string, speaker: 'host' | 'guest') => {
+    const speakerLang = speaker === 'host' ? inputLang : outputLang;
+    const strings = UI_STRINGS[speakerLang.code] || UI_STRINGS.en;
+    
     if (!text) {
-      if (speaker === 'host') setTranslation("No voice input was detected.");
-      if (speaker === 'guest') setTranscript("No voice input was detected.");
+      if (speaker === 'host') {
+        setTranscript(strings.noInput);
+        setTranslation(""); // Keep listener side clear
+      } else {
+        setTranslation(strings.noInput);
+        setTranscript(""); // Keep listener side clear
+      }
+      setIsProcessing(false); // Fix loading hang
       return;
     }
 
@@ -214,11 +237,9 @@ const App: React.FC = () => {
         const result = await translateText(text, inputLang.name, outputLang.name);
         setTranslation(result);
       } else if (speaker === 'guest') {
-        // Guest spoke in OutputLang. We need to show this on their side.
-        // We need to translate that to InputLang and put it in 'transcript' for the Host to see.
         const result = await translateText(text, outputLang.name, inputLang.name);
-        setTranslation(text); // Ensure Top shows original Guest text
-        setTranscript(result); // Bottom shows Translated English
+        setTranslation(text);
+        setTranscript(result);
       }
     } catch (e) {
       setErrorMessage("Processing failed. Please try again.");
@@ -248,6 +269,14 @@ const App: React.FC = () => {
     setActiveSpeaker(null);
     setPreparingSpeaker(null);
     setIsProcessing(true); // interim loading while stopping
+
+    // Safety timeout to force-clear loading state if processing/ASR hangs
+    const safetyTimer = setTimeout(() => {
+      setIsProcessing((processing) => {
+        if (processing) return false;
+        return processing;
+      });
+    }, 5000);
 
     if (processorRef.current) processorRef.current.disconnect();
     if (audioContextRef.current) audioContextRef.current.close();
@@ -469,7 +498,7 @@ const App: React.FC = () => {
               <div className="flex-grow w-full overflow-y-auto custom-scrollbar flex flex-col">
                 <div
                   className="my-auto mx-auto font-black text-primary dark:text-white leading-tight text-left break-words max-w-[90%] transition-all duration-300 text-2xl sm:text-4xl"
-                  dangerouslySetInnerHTML={{ __html: translation || (activeSpeaker === 'guest' ? "Listening..." : "Waiting...") }}
+                  dangerouslySetInnerHTML={{ __html: translation || (activeSpeaker === 'guest' ? (UI_STRINGS[outputLang.code]?.listening || "Listening...") : (activeSpeaker === 'host' ? (UI_STRINGS[outputLang.code]?.waiting || "Waiting...") : "")) }}
                 />
               </div>
 
@@ -530,7 +559,7 @@ const App: React.FC = () => {
 
               <div className="flex-grow w-full overflow-y-auto custom-scrollbar flex flex-col">
                 <div className="my-auto mx-auto font-black text-primary dark:text-white leading-tight text-left break-words max-w-[90%] transition-all duration-300 text-2xl sm:text-4xl">
-                  {transcript || (activeSpeaker === 'host' ? "Listening..." : "Tap Mic to Speak")}
+                  {transcript || (activeSpeaker === 'host' ? (UI_STRINGS[inputLang.code]?.listening || "Listening...") : (activeSpeaker === 'guest' ? (UI_STRINGS[inputLang.code]?.waiting || "Waiting...") : "Tap Mic to Speak"))}
                 </div>
               </div>
 
