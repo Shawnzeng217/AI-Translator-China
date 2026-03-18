@@ -133,31 +133,37 @@ const App: React.FC = () => {
 
       const recordLang = speaker === 'host' ? inputLang : outputLang;
 
-      const asr = new DomesticASR((text) => {
-        let cleanText = text;
-        if (recordLang.code === 'zh') {
-          cleanText = converter(cleanText);
-        }
-        
-        // Replacement mode instead of append mode to support iFlytek dynamic correction
-        transcriptRef.current = cleanText;
+      const asr = new DomesticASR(
+        (text) => {
+          let cleanText = text;
+          if (recordLang.code === 'zh') {
+            cleanText = converter(cleanText);
+          }
+          
+          // Replacement mode instead of append mode to support iFlytek dynamic correction
+          transcriptRef.current = cleanText;
 
-        if (speaker === 'host') {
-          setTranscript(cleanText);
-        } else {
-          setTranslation(cleanText);
-        }
+          if (speaker === 'host') {
+            setTranscript(cleanText);
+          } else {
+            setTranslation(cleanText);
+          }
 
-        const currentText = transcriptRef.current;
-        const newTextLen = Math.abs(currentText.length - lastTranslatedLengthRef.current);
-        const hasSentenceEnd = /[。！？.!?\n]/.test(cleanText.slice(-1));
+          const currentText = transcriptRef.current;
+          const newTextLen = Math.abs(currentText.length - lastTranslatedLengthRef.current);
+          const hasSentenceEnd = /[。！？.!?\n]/.test(cleanText.slice(-1));
 
-        // Ultra-responsive threshold: 5 characters for true word-by-word feel
-        if ((newTextLen > 5 || hasSentenceEnd) && !isTranslatingStreamRef.current && currentText.length > 0) {
-           handleTranslationStream(currentText, speaker);
-           lastTranslatedLengthRef.current = currentText.length;
+          // Ultra-responsive threshold: 5 characters for true word-by-word feel
+          if ((newTextLen > 5 || hasSentenceEnd) && !isTranslatingStreamRef.current && currentText.length > 0) {
+            handleTranslationStream(currentText, speaker);
+            lastTranslatedLengthRef.current = currentText.length;
+          }
+        },
+        () => {
+          // onComplete: Server detected end of speech
+          stopRecording();
         }
-      });
+      );
       asrRef.current = asr;
       await asr.start(recordLang.code);
 

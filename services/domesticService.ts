@@ -142,12 +142,14 @@ export const translateText = async (text: string, from: string, to: string): Pro
 export class DomesticASR {
   private socket: WebSocket | null = null;
   private onResult: (text: string) => void;
+  private onComplete?: () => void;
   private status: number = 0; // 0: first, 1: middle, 2: last
   private langCode: string = 'zh';
   private segments: string[] = []; // Store stabilized and rolling segments
 
-  constructor(onResult: (text: string) => void) {
+  constructor(onResult: (text: string) => void, onComplete?: () => void) {
     this.onResult = onResult;
+    this.onComplete = onComplete;
   }
 
   async start(langCode: string) {
@@ -186,6 +188,11 @@ export class DomesticASR {
         }
         
         this.onResult(this.segments.join(''));
+      }
+
+      if (resp.data && resp.data.status === 2) {
+        console.log("ASR Server signaled end of input (VAD)");
+        if (this.onComplete) this.onComplete();
       }
     };
 
