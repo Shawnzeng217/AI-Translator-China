@@ -144,6 +144,7 @@ export class DomesticASR {
   private onResult: (text: string) => void;
   private status: number = 0; // 0: first, 1: middle, 2: last
   private langCode: string = 'zh';
+  private segments: string[] = []; // Store stabilized and rolling segments
 
   constructor(onResult: (text: string) => void) {
     this.onResult = onResult;
@@ -152,6 +153,7 @@ export class DomesticASR {
   async start(langCode: string) {
     this.langCode = langCode;
     this.status = 0;
+    this.segments = []; 
     const url = await getWebsocketUrl('wss://iat-api.xfyun.cn/v2/iat', IFLYTEK_API_KEY, IFLYTEK_API_SECRET);
     this.socket = new WebSocket(url);
 
@@ -171,7 +173,19 @@ export class DomesticASR {
         result.ws.forEach((w: any) => {
           w.cw.forEach((c: any) => { text += c.w; });
         });
-        this.onResult(text);
+        
+        if (result.pgs === 'apd') {
+          this.segments.push(text);
+        } else if (result.pgs === 'rpl') {
+          const [start, end] = result.rg;
+          this.segments.splice(start - 1, end - start + 1, text);
+        } else {
+          // Standard case: just append if not using wpgs properly, 
+          // but we expect pgs to be present
+          this.segments.push(text);
+        }
+        
+        this.onResult(this.segments.join(''));
       }
     };
 

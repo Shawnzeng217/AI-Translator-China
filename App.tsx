@@ -120,26 +120,26 @@ const App: React.FC = () => {
       const recordLang = speaker === 'host' ? inputLang : outputLang;
 
       const asr = new DomesticASR((text) => {
-        let newPart = text;
+        let cleanText = text;
         if (recordLang.code === 'zh') {
-          newPart = converter(newPart);
+          cleanText = converter(cleanText);
         }
-        transcriptRef.current += newPart;
+        
+        // Replacement mode instead of append mode to support iFlytek dynamic correction
+        transcriptRef.current = cleanText;
 
         if (speaker === 'host') {
-          setTranscript(transcriptRef.current);
+          setTranscript(cleanText);
         } else {
-          setTranslation(transcriptRef.current);
+          setTranslation(cleanText);
         }
 
-        // Speed optimization: Trigger incremental translation 
-        // 1. If it's the Host speaking (so we translate for the Guest)
-        // 2. If enough new text or sentence end detected
         const currentText = transcriptRef.current;
-        const newTextLen = currentText.length - lastTranslatedLengthRef.current;
-        const hasSentenceEnd = /[。！？.!?\n]/.test(newPart);
+        const newTextLen = Math.abs(currentText.length - lastTranslatedLengthRef.current);
+        const hasSentenceEnd = /[。！？.!?\n]/.test(cleanText.slice(-1));
 
-        if ((newTextLen > 30 || hasSentenceEnd) && !isTranslatingStreamRef.current) {
+        // Ultra-responsive threshold: 15 characters
+        if ((newTextLen > 15 || hasSentenceEnd) && !isTranslatingStreamRef.current && currentText.length > 0) {
            handleTranslationStream(currentText, speaker);
            lastTranslatedLengthRef.current = currentText.length;
         }
