@@ -305,6 +305,7 @@ export const encode = (bytes: Uint8Array) => {
 
 export const playPCM = async (base64Data: string) => {
   if (!base64Data) return;
+  
   const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
   
   const binaryString = atob(base64Data);
@@ -333,6 +334,8 @@ export const playPCM = async (base64Data: string) => {
   const source = audioContext.createBufferSource();
   source.buffer = buffer;
   source.connect(audioContext.destination);
-  source.onended = () => { audioContext.close(); };
+  source.onended = () => { 
+    audioContext.close(); 
+  };
   source.start();
 };
