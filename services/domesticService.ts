@@ -240,7 +240,7 @@ export const generateSpeech = async (text: string, language: string): Promise<st
   return new Promise(async (resolve, reject) => {
     const url = await getWebsocketUrl('wss://tts-api.xfyun.cn/v2/tts', IFLYTEK_API_KEY, IFLYTEK_API_SECRET);
     const socket = new WebSocket(url);
-    let audioData = "";
+    const audioChunks: Uint8Array[] = [];
 
     socket.onopen = () => {
       const frame = {
@@ -253,7 +253,7 @@ export const generateSpeech = async (text: string, language: string): Promise<st
         },
         data: {
           status: 2,
-          text: btoa(Array.from(new TextEncoder().encode(text), b => String.fromCharCode(b)).join(''))
+          text: encode(new TextEncoder().encode(text))
         }
       };
       socket.send(JSON.stringify(frame));
@@ -267,10 +267,27 @@ export const generateSpeech = async (text: string, language: string): Promise<st
         reject(resp.message);
         return;
       }
-      audioData += resp.data.audio;
+      if (resp.data && resp.data.audio) {
+        const binaryString = atob(resp.data.audio);
+        const chunk = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          chunk[i] = binaryString.charCodeAt(i);
+        }
+        audioChunks.push(chunk);
+      }
+      
       if (resp.data.status === 2) {
         socket.close();
-        resolve(audioData);
+        // Merge chunks
+        const totalLength = audioChunks.reduce((acc, c) => acc + c.length, 0);
+        const merged = new Uint8Array(totalLength);
+        let offset = 0;
+        for (const chunk of audioChunks) {
+          merged.set(chunk, offset);
+          offset += chunk.length;
+        }
+        // Convert back to base64 for playPCM
+        resolve(encode(merged));
       }
     };
 
