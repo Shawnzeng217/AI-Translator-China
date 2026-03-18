@@ -251,7 +251,7 @@ export const generateSpeech = async (text: string, language: string): Promise<st
         },
         data: {
           status: 2,
-          text: btoa(unescape(encodeURIComponent(text)))
+          text: btoa(Array.from(new TextEncoder().encode(text), b => String.fromCharCode(b)).join(''))
         }
       };
       socket.send(JSON.stringify(frame));
@@ -289,20 +289,31 @@ export const playPCM = async (base64Data: string) => {
   const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
   
   const binaryString = atob(base64Data);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
     bytes[i] = binaryString.charCodeAt(i);
   }
   
-  const dataInt16 = new Int16Array(bytes.buffer);
-  const buffer = audioContext.createBuffer(1, dataInt16.length, 16000);
-  const channelData = buffer.getChannelData(0);
-  for (let i = 0; i < dataInt16.length; i++) {
-    channelData[i] = dataInt16[i] / 32768.0;
+  if (audioContext.state === 'suspended') {
+    await audioContext.resume();
   }
 
+  const numSamples = Math.floor(len / 2);
+  const buffer = audioContext.createBuffer(1, numSamples, 16000);
+  const channelData = buffer.getChannelData(0);
+  const dataView = new DataView(bytes.buffer);
+  
+  for (let i = 0; i < numSamples; i++) {
+    if (i * 2 + 1 < len) {
+      // iFlytek returns Little Endian PCM
+      channelData[i] = dataView.getInt16(i * 2, true) / 32768.0;
+    }
+  }
+  
   const source = audioContext.createBufferSource();
   source.buffer = buffer;
   source.connect(audioContext.destination);
+  source.onended = () => { audioContext.close(); };
   source.start();
 };
