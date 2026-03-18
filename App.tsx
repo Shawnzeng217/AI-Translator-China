@@ -152,8 +152,8 @@ const App: React.FC = () => {
         const newTextLen = Math.abs(currentText.length - lastTranslatedLengthRef.current);
         const hasSentenceEnd = /[。！？.!?\n]/.test(cleanText.slice(-1));
 
-        // Ultra-responsive threshold: 15 characters
-        if ((newTextLen > 15 || hasSentenceEnd) && !isTranslatingStreamRef.current && currentText.length > 0) {
+        // Ultra-responsive threshold: 5 characters for true word-by-word feel
+        if ((newTextLen > 5 || hasSentenceEnd) && !isTranslatingStreamRef.current && currentText.length > 0) {
            handleTranslationStream(currentText, speaker);
            lastTranslatedLengthRef.current = currentText.length;
         }
@@ -162,7 +162,7 @@ const App: React.FC = () => {
       await asr.start(recordLang.code);
 
       const source = audioContext.createMediaStreamSource(stream);
-      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      const processor = audioContext.createScriptProcessor(1024, 1, 1); // Shrunk from 4096 to 1024 for lower latency
       processorRef.current = processor;
 
       processor.onaudioprocess = (e) => {
@@ -271,7 +271,7 @@ const App: React.FC = () => {
     setIsProcessing(true); // interim loading while stopping
 
     // Safety timeout to force-clear loading state if processing/ASR hangs
-    const safetyTimer = setTimeout(() => {
+    setTimeout(() => {
       setIsProcessing((processing) => {
         if (processing) return false;
         return processing;

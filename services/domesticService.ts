@@ -202,8 +202,10 @@ export class DomesticASR {
         language: this.langCode === 'en' ? "en_us" : "zh_cn",
         domain: "iat",
         accent: "mandarin",
-        vad_eos: 1000, // End of speech detection timeout (ms)
-        dwa: "wpgs"    // Write Pre-Generated Stream for faster partials
+        vad_eos: 1000, 
+        dwa: "wpgs",    // Write Pre-Generated Stream for faster partials
+        pd: "1",        // Some versions of the API use this for partials
+        ptt: 1          // Add punctuation
       } : undefined,
       data: {
         status: this.status,
