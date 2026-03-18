@@ -1,8 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { TranslationMode, Language } from './types';
 import { LANGUAGES } from './constants';
-import { GoogleGenAI, Modality } from "@google/genai";
-import { translateText, generateSpeech, playPCM, encode } from './services/geminiService';
+import { translateText, generateSpeech, playPCM, DomesticASR } from './services/domesticService';
 import * as OpenCC from 'opencc-js';
 
 // Initialize converter: Traditional (hk/tw) -> Simplified (cn)
@@ -33,10 +32,10 @@ const App: React.FC = () => {
   const [showOutputPicker, setShowOutputPicker] = useState(false);
 
   const audioContextRef = useRef<AudioContext | null>(null);
-  const sessionRef = useRef<any>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const asrRef = useRef<DomesticASR | null>(null);
 
   // Use a ref to track transcript for immediate access in closures/callbacks
   const transcriptRef = useRef<string>("");
@@ -109,97 +108,46 @@ const App: React.FC = () => {
     setPreparingSpeaker(speaker);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_API_KEY || '' });
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
       const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
       audioContextRef.current = audioContext;
 
-      // Determine languages based on speaker
-      // Host: Speaking InputLang -> Transcribe in InputLang
-      // Guest: Speaking OutputLang -> Transcribe in OutputLang
       const recordLang = speaker === 'host' ? inputLang : outputLang;
 
-      const sessionPromise = ai.live.connect({
-        model: 'gemini-2.5-flash-native-audio-preview-12-2025',
-        callbacks: {
-          onopen: () => {
-            const source = audioContext.createMediaStreamSource(stream);
-            const processor = audioContext.createScriptProcessor(4096, 1, 1);
-            processorRef.current = processor;
-
-            processor.onaudioprocess = (e) => {
-              const inputData = e.inputBuffer.getChannelData(0);
-              const l = inputData.length;
-              const int16 = new Int16Array(l);
-              for (let i = 0; i < l; i++) {
-                int16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
-              }
-              const pcmBlob = {
-                data: encode(new Uint8Array(int16.buffer)),
-                mimeType: 'audio/pcm;rate=16000'
-              };
-
-              sessionPromise.then(session => {
-                session.sendRealtimeInput({ media: pcmBlob });
-              }).catch(err => console.error("Session send error:", err));
-            };
-            source.connect(processor);
-            processor.connect(audioContext.destination);
-          },
-          onmessage: async (msg) => {
-            if (msg.serverContent?.inputTranscription) {
-              let newPart = msg.serverContent.inputTranscription.text || "";
-
-              // Remove non-speech markers like <noise>, <inaudible>, etc.
-              newPart = newPart.replace(/<[^>]+>/g, '');
-
-              // FORCE CONVERSION: If recording language is Simplified Chinese (zh),
-              // convert any Traditional characters to Simplified immediately.
-              if (recordLang.code === 'zh') {
-                newPart = converter(newPart);
-              }
-
-              transcriptRef.current += newPart;
-
-              // Visual Feedback:
-              // If Host speaking: Update 'transcript' (Bottom Card)
-              // If Guest speaking: Update 'translation' (Top Card) as a live subtitle/preview
-              if (speaker === 'host') {
-                setTranscript(transcriptRef.current);
-              } else {
-                setTranslation(transcriptRef.current);
-              }
-            }
-          },
-          onerror: (e: any) => {
-            console.error("Live API Error:", e);
-            setErrorMessage("Recognition interrupted. Please check connection.");
-          }
-        },
-        config: {
-          responseModalities: [Modality.AUDIO],
-          inputAudioTranscription: {},
-          speechConfig: {
-            voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } },
-          },
-          systemInstruction: `You are a professional concierge transcriptionist.
-          CONTEXT: A person is speaking in ${recordLang.name}.
-          TASK: Provide a high-fidelity word-for-word transcription of their speech in ${recordLang.name}.
-          STRICT RULES:
-          1. Transcribe ONLY what you hear.
-          2. Output ONLY the text in ${recordLang.name}.
-          3. DO NOT translate to English or any other language unless the user is already speaking that language.
-          4. DO NOT provide any conversational response.
-          5. You MUST output using the standard writing system of ${recordLang.name}. NEVER transliterate or phonetically spell the speech using another language or script (for example, do NOT output Chinese characters for English speech, or vice versa). Always use the correct script and orthography for ${recordLang.name}.
-          6. CRITICAL (Chinese only): If the target language is "Simplified Chinese" (zh), YOU MUST OUTPUT IN SIMPLIFIED CHINESE CHARACTERS (简体中文). NEVER use Traditional Chinese characters (繁体中文). Even if the speaker has a Taiwan or Cantonese accent, you MUST normalize the written output to Simplified Chinese. Do not mix scripts.`
+      const asr = new DomesticASR((text) => {
+        let newPart = text;
+        if (recordLang.code === 'zh') {
+          newPart = converter(newPart);
+        }
+        transcriptRef.current += newPart;
+        if (speaker === 'host') {
+          setTranscript(transcriptRef.current);
+        } else {
+          setTranslation(transcriptRef.current);
         }
       });
+      asrRef.current = asr;
+      await asr.start(recordLang.code);
 
-      sessionRef.current = await sessionPromise;
+      const source = audioContext.createMediaStreamSource(stream);
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
 
-      // 约 1 秒的“准备中”阶段，提醒用户看到 Live 再开始说话
+      processor.onaudioprocess = (e) => {
+        const inputData = e.inputBuffer.getChannelData(0);
+        const l = inputData.length;
+        const int16 = new Int16Array(l);
+        for (let i = 0; i < l; i++) {
+          int16[i] = Math.max(-1, Math.min(1, inputData[i])) * 32767;
+        }
+        asr.sendAudio(new Uint8Array(int16.buffer));
+      };
+      
+      source.connect(processor);
+      processor.connect(audioContext.destination);
+
       setTimeout(() => {
         setPreparingSpeaker((current) => (current === speaker ? null : current));
       }, 1000);
@@ -263,8 +211,8 @@ const App: React.FC = () => {
     if (processorRef.current) processorRef.current.disconnect();
     if (audioContextRef.current) audioContextRef.current.close();
     if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
-    if (sessionRef.current) {
-      try { sessionRef.current.close(); } catch (e) { }
+    if (asrRef.current) {
+      asrRef.current.stop();
     }
 
     setTimeout(async () => {
