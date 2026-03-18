@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { TranslationMode, Language } from './types';
 import { LANGUAGES } from './constants';
-import { translateText, generateSpeech, playPCM, DomesticASR } from './services/domesticService';
+import { translateText, translateTextStream, generateSpeech, playPCM, DomesticASR } from './services/domesticService';
 import * as OpenCC from 'opencc-js';
 
 // Initialize converter: Traditional (hk/tw) -> Simplified (cn)
@@ -39,6 +39,8 @@ const App: React.FC = () => {
 
   // Use a ref to track transcript for immediate access in closures/callbacks
   const transcriptRef = useRef<string>("");
+  const isTranslatingStreamRef = useRef<boolean>(false);
+  const lastTranslatedLengthRef = useRef<number>(0);
 
   // Auto-scroll textarea as text arrives
   useEffect(() => {
@@ -102,6 +104,7 @@ const App: React.FC = () => {
     // If Guest starts: Clear everything to prepare for their turn.
     setTranscript("");
     transcriptRef.current = "";
+    lastTranslatedLengthRef.current = 0;
     setTranslation("");
     setErrorMessage(null);
     setActiveSpeaker(speaker);
@@ -122,10 +125,23 @@ const App: React.FC = () => {
           newPart = converter(newPart);
         }
         transcriptRef.current += newPart;
+
         if (speaker === 'host') {
           setTranscript(transcriptRef.current);
         } else {
           setTranslation(transcriptRef.current);
+        }
+
+        // Speed optimization: Trigger incremental translation 
+        // 1. If it's the Host speaking (so we translate for the Guest)
+        // 2. If enough new text or sentence end detected
+        const currentText = transcriptRef.current;
+        const newTextLen = currentText.length - lastTranslatedLengthRef.current;
+        const hasSentenceEnd = /[。！？.!?\n]/.test(newPart);
+
+        if ((newTextLen > 30 || hasSentenceEnd) && !isTranslatingStreamRef.current) {
+           handleTranslationStream(currentText, speaker);
+           lastTranslatedLengthRef.current = currentText.length;
         }
       });
       asrRef.current = asr;
@@ -156,6 +172,31 @@ const App: React.FC = () => {
       setErrorMessage(`Could not start recording. (${err instanceof Error ? err.name + ': ' + err.message : String(err)})`);
       setActiveSpeaker(null);
       setPreparingSpeaker(null);
+    }
+  };
+
+  const handleTranslationStream = async (text: string, speaker: 'host' | 'guest') => {
+    if (!text || isTranslatingStreamRef.current) return;
+
+    isTranslatingStreamRef.current = true;
+    const from = speaker === 'host' ? inputLang.name : outputLang.name;
+    const to = speaker === 'host' ? outputLang.name : inputLang.name;
+    
+    let currentStreamed = "";
+    try {
+      await translateTextStream(text, from, to, (chunk) => {
+        currentStreamed += chunk;
+        if (speaker === 'host') {
+          setTranslation(currentStreamed);
+        } else {
+          setTranscript(currentStreamed);
+        }
+      });
+    } catch (e) {
+      console.error("Stream translation error:", e);
+    } finally {
+      isTranslatingStreamRef.current = false;
+      // If transcript has grown significantly during this stream, maybe trigger again?
     }
   };
 
@@ -219,7 +260,10 @@ const App: React.FC = () => {
       // Use the ref for latest text
       const textToTranslate = transcriptRef.current.trim();
       if (currentSpeaker) {
+        // Final corrective translation (batch) for highest accuracy
+        isTranslatingStreamRef.current = true; // Block any further stream triggers
         await handleTranslation(textToTranslate, currentSpeaker);
+        isTranslatingStreamRef.current = false;
       } else {
         setIsProcessing(false);
       }

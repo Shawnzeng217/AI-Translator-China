@@ -35,7 +35,74 @@ const getWebsocketUrl = async (url: string, apiKey: string, apiSecret: string): 
 };
 
 /**
- * Translates text using DeepSeek-V3 API.
+ * Translates text using DeepSeek-V3 API with streaming.
+ */
+export const translateTextStream = async (
+  text: string, 
+  from: string, 
+  to: string, 
+  onChunk: (chunk: string) => void
+): Promise<void> => {
+  if (!DEEPSEEK_API_KEY) {
+    onChunk("DeepSeek API key is missing.");
+    return;
+  }
+
+  try {
+    const response = await fetch(DEEPSEEK_API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: "deepseek-chat",
+        stream: true,
+        messages: [
+          {
+            role: "system",
+            content: `You are a professional hotel concierge translator. Translate from ${from} to ${to}. Provide ONLY the translated text.`
+          },
+          { role: "user", content: text }
+        ]
+      })
+    });
+
+    if (!response.body) return;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let isChinese = to.toLowerCase().includes('chinese');
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n');
+      
+      for (const line of lines) {
+        if (line.startsWith('data: ') && line !== 'data: [DONE]') {
+          try {
+            const data = JSON.parse(line.slice(6));
+            let content = data.choices[0]?.delta?.content || "";
+            if (content) {
+              if (isChinese) content = converter(content);
+              onChunk(content);
+            }
+          } catch (e) {
+            // Partial JSON or other error
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error("DeepSeek Stream error:", error);
+    onChunk("\n[Error during translation]");
+  }
+};
+
+/**
+ * Translates text using DeepSeek-V3 API (Batch).
  */
 export const translateText = async (text: string, from: string, to: string): Promise<string> => {
   if (!DEEPSEEK_API_KEY) return "DeepSeek API key is missing.";
@@ -120,7 +187,9 @@ export class DomesticASR {
       business: this.status === 0 ? {
         language: this.langCode === 'en' ? "en_us" : "zh_cn",
         domain: "iat",
-        accent: "mandarin"
+        accent: "mandarin",
+        vad_eos: 1000, // End of speech detection timeout (ms)
+        dwa: "wpgs"    // Write Pre-Generated Stream for faster partials
       } : undefined,
       data: {
         status: this.status,
