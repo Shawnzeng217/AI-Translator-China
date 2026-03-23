@@ -141,8 +141,10 @@ const App: React.FC = () => {
           const newTextLen = Math.abs(currentText.length - lastTranslatedLengthRef.current);
           const hasSentenceEnd = /[。！？.!?\n]/.test(cleanText.slice(-1));
 
-          // Ultra-responsive threshold: 5 characters for true word-by-word feel
-          if ((newTextLen > 5 || hasSentenceEnd) && !isTranslatingStreamRef.current && currentText.length > 0) {
+          // Threshold: 3 for CJKV/logographic, 5 for others
+          const threshold = ['zh', 'ja', 'ko', 'th', 'vi'].includes(recordLang.code) ? 3 : 5;
+
+          if ((newTextLen >= threshold || hasSentenceEnd) && !isTranslatingStreamRef.current && currentText.length > 0) {
             handleTranslationStream(currentText, speaker);
             lastTranslatedLengthRef.current = currentText.length;
           }
@@ -187,12 +189,13 @@ const App: React.FC = () => {
     if (!text || isTranslatingStreamRef.current) return;
 
     isTranslatingStreamRef.current = true;
-    const from = speaker === 'host' ? inputLang.name : outputLang.name;
-    const to = speaker === 'host' ? outputLang.name : inputLang.name;
+    const from = speaker === 'host' ? inputLang.nameEn : outputLang.nameEn;
+    const to = speaker === 'host' ? outputLang.nameEn : inputLang.nameEn;
+    const toCode = speaker === 'host' ? outputLang.code : inputLang.code;
     
     let currentStreamed = "";
     try {
-      await translateTextStream(text, from, to, (chunk) => {
+      await translateTextStream(text, from, to, toCode, (chunk) => {
         currentStreamed += chunk;
         if (speaker === 'host') {
           setTranslation(currentStreamed);
@@ -228,10 +231,10 @@ const App: React.FC = () => {
     setIsProcessing(true);
     try {
       if (speaker === 'host') {
-        const result = await translateText(text, inputLang.name, outputLang.name);
+        const result = await translateText(text, inputLang.nameEn, outputLang.nameEn, outputLang.code);
         setTranslation(result);
       } else if (speaker === 'guest') {
-        const result = await translateText(text, outputLang.name, inputLang.name);
+        const result = await translateText(text, outputLang.nameEn, inputLang.nameEn, inputLang.code);
         setTranslation(text);
         setTranscript(result);
       }

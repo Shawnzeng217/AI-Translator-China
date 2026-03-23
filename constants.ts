@@ -2,17 +2,17 @@
 import { Language } from './types';
 
 export const LANGUAGES: Language[] = [
-  { code: 'en', name: 'English', flag: 'https://flagcdn.com/w40/us.png' },
-  { code: 'zh', name: '简体中文', flag: 'https://flagcdn.com/w40/cn.png' },
-  { code: 'ja', name: '日本語', flag: 'https://flagcdn.com/w40/jp.png' },
-  { code: 'ko', name: '한국어', flag: 'https://flagcdn.com/w40/kr.png' },
-  { code: 'th', name: 'ไทย', flag: 'https://flagcdn.com/w40/th.png' },
-  { code: 'vi', name: 'Tiếng Việt', flag: 'https://flagcdn.com/w40/vn.png' },
-  { code: 'id', name: 'Bahasa Indonesia', flag: 'https://flagcdn.com/w40/id.png' },
-  { code: 'ms', name: 'Bahasa Melayu', flag: 'https://flagcdn.com/w40/my.png' },
-  { code: 'es', name: 'Español', flag: 'https://flagcdn.com/w40/es.png' },
-  { code: 'fr', name: 'Français', flag: 'https://flagcdn.com/w40/fr.png' },
-  { code: 'de', name: 'Deutsch', flag: 'https://flagcdn.com/w40/de.png' },
+  { code: 'en', name: 'English', nameEn: 'English', flag: 'https://flagcdn.com/w40/us.png' },
+  { code: 'zh', name: '简体中文', nameEn: 'Simplified Chinese', flag: 'https://flagcdn.com/w40/cn.png' },
+  { code: 'ja', name: '日本語', nameEn: 'Japanese', flag: 'https://flagcdn.com/w40/jp.png' },
+  { code: 'ko', name: '한국어', nameEn: 'Korean', flag: 'https://flagcdn.com/w40/kr.png' },
+  { code: 'th', name: 'ไทย', nameEn: 'Thai', flag: 'https://flagcdn.com/w40/th.png' },
+  { code: 'vi', name: 'Tiếng Việt', nameEn: 'Vietnamese', flag: 'https://flagcdn.com/w40/vn.png' },
+  { code: 'id', name: 'Bahasa Indonesia', nameEn: 'Indonesian', flag: 'https://flagcdn.com/w40/id.png' },
+  { code: 'ms', name: 'Bahasa Melayu', nameEn: 'Malay', flag: 'https://flagcdn.com/w40/my.png' },
+  { code: 'es', name: 'Español', nameEn: 'Spanish', flag: 'https://flagcdn.com/w40/es.png' },
+  { code: 'fr', name: 'Français', nameEn: 'French', flag: 'https://flagcdn.com/w40/fr.png' },
+  { code: 'de', name: 'Deutsch', nameEn: 'German', flag: 'https://flagcdn.com/w40/de.png' },
 ];
 
 export const INITIAL_INPUT = "Welcome to our hotel. I would like to help you with your luggage and show you to your executive suite on the top floor.";

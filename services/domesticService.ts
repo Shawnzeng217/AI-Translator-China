@@ -41,6 +41,7 @@ export const translateTextStream = async (
   text: string, 
   from: string, 
   to: string, 
+  toCode: string,
   onChunk: (chunk: string) => void
 ): Promise<void> => {
   if (!DEEPSEEK_API_KEY) {
@@ -71,7 +72,7 @@ export const translateTextStream = async (
     if (!response.body) return;
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let isChinese = to.toLowerCase().includes('chinese');
+    let isChinese = toCode === 'zh';
 
     while (true) {
       const { done, value } = await reader.read();
@@ -104,7 +105,7 @@ export const translateTextStream = async (
 /**
  * Translates text using DeepSeek-V3 API (Batch).
  */
-export const translateText = async (text: string, from: string, to: string): Promise<string> => {
+export const translateText = async (text: string, from: string, to: string, toCode: string): Promise<string> => {
   if (!DEEPSEEK_API_KEY) return "DeepSeek API key is missing.";
 
   try {
@@ -128,7 +129,7 @@ export const translateText = async (text: string, from: string, to: string): Pro
 
     const data = await response.json();
     let translated = data.choices?.[0]?.message?.content?.trim() || "Translation failed.";
-    if (to.toLowerCase().includes('chinese')) translated = converter(translated);
+    if (toCode === 'zh') translated = converter(translated);
     return translated;
   } catch (error) {
     console.error("DeepSeek error:", error);
@@ -240,7 +241,9 @@ export class DomesticASR {
         vad_eos: 1000, 
         dwa: "wpgs",    // Write Pre-Generated Stream for faster partials
         pd: "1",        // Some versions of the API use this for partials
-        ptt: 1          // Add punctuation
+        ptt: 1,         // Add punctuation
+        // For non-Chinese languages, accent must be omitted
+        ...(this.langCode !== 'zh' ? { accent: undefined } : {})
       } : undefined,
       data: {
         status: this.status,

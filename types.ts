@@ -8,6 +8,7 @@ export enum TranslationMode {
 export interface Language {
   code: string;
   name: string;
+  nameEn: string;
   flag?: string;
 }
 
