@@ -172,13 +172,15 @@ export class DomesticASR {
   private socket: WebSocket | null = null;
   private onResult: (text: string) => void;
   private onComplete?: () => void;
+  private onError?: (message: string, code: number) => void;
   private status: number = 0; // 0: first, 1: middle, 2: last
   private langCode: string = 'zh';
   private segments: string[] = []; // Store stabilized and rolling segments
 
-  constructor(onResult: (text: string) => void, onComplete?: () => void) {
+  constructor(onResult: (text: string) => void, onComplete?: () => void, onError?: (message: string, code: number) => void) {
     this.onResult = onResult;
     this.onComplete = onComplete;
+    this.onError = onError;
   }
 
   async start(langCode: string) {
@@ -195,7 +197,8 @@ export class DomesticASR {
     this.socket.onmessage = (e) => {
       const resp = JSON.parse(e.data);
       if (resp.code !== 0) {
-        console.error("ASR Error:", resp.message);
+        console.error(`ASR Error: ${resp.message} (Code: ${resp.code})`);
+        if (this.onError) this.onError(resp.message, resp.code);
         return;
       }
       if (resp.data && resp.data.result) {
@@ -237,13 +240,12 @@ export class DomesticASR {
       business: this.status === 0 ? {
         language: IFLYTEK_LANG_MAP[this.langCode] || "zh_cn",
         domain: "iat",
-        accent: "mandarin",
+        accent: this.langCode === 'zh' ? "mandarin" : undefined,
         vad_eos: 1000, 
         dwa: "wpgs",    // Write Pre-Generated Stream for faster partials
         pd: "1",        // Some versions of the API use this for partials
         ptt: 1,         // Add punctuation
-        // For non-Chinese languages, accent must be omitted
-        ...(this.langCode !== 'zh' ? { accent: undefined } : {})
+        ent: "int8"     // Common engine for v2
       } : undefined,
       data: {
         status: this.status,

@@ -152,6 +152,10 @@ const App: React.FC = () => {
         () => {
           // onComplete: Server detected end of speech
           stopRecording();
+        },
+        (message, code) => {
+          setErrorMessage(`${message} (Code: ${code})`);
+          stopRecording();
         }
       );
       asrRef.current = asr;
