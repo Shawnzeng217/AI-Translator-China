@@ -260,9 +260,9 @@ const App: React.FC = () => {
   const stopRecording = async () => {
     // Capture the current speaker before resetting
     const currentSpeaker = activeSpeaker;
-    setActiveSpeaker(null);
+    // Don't clear activeSpeaker yet – keep UI stable to avoid flash/flicker.
+    // It will be cleared atomically with the processing-start below.
     setPreparingSpeaker(null);
-    setIsProcessing(true); // interim loading while stopping
 
     // Safety timeout to force-clear loading state if processing/ASR hangs
     setTimeout(() => {
@@ -280,6 +280,12 @@ const App: React.FC = () => {
     }
 
     setTimeout(async () => {
+      // NOW clear activeSpeaker and set processing together so the UI
+      // transitions directly from "recording" → "processing" with no
+      // intermediate idle flash.
+      setActiveSpeaker(null);
+      setIsProcessing(true);
+
       // Use the ref for latest text
       const textToTranslate = transcriptRef.current.trim();
       if (currentSpeaker) {
