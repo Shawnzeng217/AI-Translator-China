@@ -239,7 +239,7 @@ const App: React.FC = () => {
         setTranscript(result);
       }
     } catch (e) {
-      setErrorMessage("Processing failed. Please try again.");
+      setErrorMessage(strings.waiting + " (Error: " + (e instanceof Error ? e.message : String(e)) + ")");
     } finally {
       setIsProcessing(false);
     }
@@ -302,7 +302,9 @@ const App: React.FC = () => {
     }, 100);
   };
 
-  const strings = UI_STRINGS[inputLang.code] || UI_STRINGS.en;
+  const hostStrings = UI_STRINGS[inputLang.code] || UI_STRINGS.en;
+  const guestStrings = UI_STRINGS[outputLang.code] || UI_STRINGS.en;
+  const strings = hostStrings; // Default/Operator strings for common UI elements
 
   const LanguageModal = ({ active, onSelect, onClose }: { active: Language, onSelect: (l: Language) => void, onClose: () => void }) => (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
@@ -441,13 +443,13 @@ const App: React.FC = () => {
                 {preparingSpeaker === 'host' && (
                   <div className="absolute top-3 right-4 flex items-center space-x-1.5 bg-yellow-400/10 text-yellow-500 px-2.5 py-1 rounded-full border border-yellow-400/30 shadow-sm backdrop-blur-sm">
                     <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse"></div>
-                    <span className="text-[9px] font-black uppercase tracking-widest">Preparing…</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest">{hostStrings.preparing}</span>
                   </div>
                 )}
                 {preparingSpeaker !== 'host' && activeSpeaker === 'host' && (
                   <div className="absolute top-3 right-4 flex items-center space-x-1.5 bg-red-500/10 text-red-500 px-2.5 py-1 rounded-full border border-red-500/20 shadow-sm backdrop-blur-sm">
                     <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping"></div>
-                    <span className="text-[9px] font-black uppercase tracking-widest">Live</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest">{hostStrings.live}</span>
                   </div>
                 )}
                 {/* Send Button for Manual Text Input */}
@@ -489,13 +491,13 @@ const App: React.FC = () => {
                 {preparingSpeaker === 'guest' && (
                   <div className="flex items-center space-x-1.5 bg-yellow-400/10 text-yellow-500 px-2.5 py-1 rounded-full border border-yellow-400/30 shadow-sm backdrop-blur-sm">
                     <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
-                    <span className="text-[9px] font-black uppercase tracking-widest">Preparing…</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest">{guestStrings.preparing}</span>
                   </div>
                 )}
                 {preparingSpeaker !== 'guest' && activeSpeaker === 'guest' && (
                   <div className="flex items-center space-x-1.5 bg-red-500/10 text-red-500 px-2.5 py-1 rounded-full border border-red-500/20 shadow-sm backdrop-blur-sm">
                     <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />
-                    <span className="text-[9px] font-black uppercase tracking-widest">Live</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest">{guestStrings.live}</span>
                   </div>
                 )}
               </div>
@@ -503,7 +505,7 @@ const App: React.FC = () => {
               <div className="flex-grow w-full overflow-y-auto custom-scrollbar flex flex-col">
                 <div
                   className="my-auto mx-auto font-black text-primary dark:text-white leading-tight text-left break-words max-w-[90%] transition-all duration-300 text-2xl sm:text-4xl"
-                  dangerouslySetInnerHTML={{ __html: translation || (activeSpeaker === 'guest' ? strings.listening : (activeSpeaker === 'host' ? strings.waiting : "")) }}
+                  dangerouslySetInnerHTML={{ __html: translation || (activeSpeaker === 'guest' ? guestStrings.listening : (activeSpeaker === 'host' ? guestStrings.waiting : "")) }}
                 />
               </div>
 
@@ -551,20 +553,20 @@ const App: React.FC = () => {
                 {preparingSpeaker === 'host' && (
                   <div className="flex items-center space-x-1.5 bg-yellow-400/10 text-yellow-500 px-2.5 py-1 rounded-full border border-yellow-400/30 shadow-sm backdrop-blur-sm">
                     <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse" />
-                    <span className="text-[9px] font-black uppercase tracking-widest">Preparing…</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest">{hostStrings.preparing}</span>
                   </div>
                 )}
                 {preparingSpeaker !== 'host' && activeSpeaker === 'host' && (
                   <div className="flex items-center space-x-1.5 bg-red-500/10 text-red-500 px-2.5 py-1 rounded-full border border-red-500/20 shadow-sm backdrop-blur-sm">
                     <div className="w-1.5 h-1.5 bg-red-500 rounded-full animate-ping" />
-                    <span className="text-[9px] font-black uppercase tracking-widest">Live</span>
+                    <span className="text-[9px] font-black uppercase tracking-widest">{hostStrings.live}</span>
                   </div>
                 )}
               </div>
 
               <div className="flex-grow w-full overflow-y-auto custom-scrollbar flex flex-col">
                 <div className="my-auto mx-auto font-black text-primary dark:text-white leading-tight text-left break-words max-w-[90%] transition-all duration-300 text-2xl sm:text-4xl">
-                  {transcript || (activeSpeaker === 'host' ? strings.listening : (activeSpeaker === 'guest' ? strings.waiting : strings.tapMicToSpeak))}
+                  {transcript || (activeSpeaker === 'host' ? hostStrings.listening : (activeSpeaker === 'guest' ? hostStrings.waiting : hostStrings.tapMicToSpeak))}
                 </div>
               </div>
 
