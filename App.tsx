@@ -28,6 +28,8 @@ const App: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [preparingSpeaker, setPreparingSpeaker] = useState<'host' | 'guest' | null>(null);
+  const [hasShownSolo, setHasShownSolo] = useState<boolean>(false);
+  const [hasShownBridge, setHasShownBridge] = useState<boolean>(false);
 
   // Selection UI state
   const [showInputPicker, setShowInputPicker] = useState(false);
@@ -42,6 +44,7 @@ const App: React.FC = () => {
   // Use a ref to track transcript for immediate access in closures/callbacks
   const transcriptRef = useRef<string>("");
   const isTranslatingStreamRef = useRef<boolean>(false);
+  const translationAbortControllerRef = useRef<AbortController | null>(null);
   const lastTranslatedLengthRef = useRef<number>(0);
 
   // Auto-scroll textarea as text arrives
@@ -72,6 +75,14 @@ const App: React.FC = () => {
       setBridgeTranslation(translation);
     }
 
+    // Stop any active processes when switching modes
+    if (activeSpeaker || isProcessing) {
+      stopRecording();
+    }
+    setIsProcessing(false);
+    setActiveSpeaker(null);
+    setPreparingSpeaker(null);
+
     // Switch mode
     setMode(newMode);
 
@@ -99,6 +110,16 @@ const App: React.FC = () => {
       setIsPlaying(false);
     }
   };
+
+  useEffect(() => {
+    if (translation || isProcessing) {
+      if (mode === TranslationMode.SOLO && !hasShownSolo) {
+        setHasShownSolo(true);
+      } else if (mode === TranslationMode.CONVERSATION && !hasShownBridge) {
+        setHasShownBridge(true);
+      }
+    }
+  }, [translation, isProcessing, mode, hasShownSolo, hasShownBridge]);
 
   const startRecording = async (speaker: 'host' | 'guest') => {
     // Reset based on who is starting. 
@@ -141,8 +162,8 @@ const App: React.FC = () => {
           const newTextLen = Math.abs(currentText.length - lastTranslatedLengthRef.current);
           const hasSentenceEnd = /[。！？.!?\n]/.test(cleanText.slice(-1));
 
-          // Threshold: 3 for CJKV/logographic, 5 for others
-          const threshold = ['zh', 'ja', 'ko', 'th', 'vi'].includes(recordLang.code) ? 3 : 5;
+          // Lower threshold for faster real-time feedback (2 for all languages)
+          const threshold = 2;
 
           if ((newTextLen >= threshold || hasSentenceEnd) && !isTranslatingStreamRef.current && currentText.length > 0) {
             handleTranslationStream(currentText, speaker);
@@ -190,7 +211,14 @@ const App: React.FC = () => {
   };
 
   const handleTranslationStream = async (text: string, speaker: 'host' | 'guest') => {
-    if (!text || isTranslatingStreamRef.current) return;
+    if (!text) return;
+
+    // Abort any ongoing translation stream for this speaker
+    if (translationAbortControllerRef.current) {
+      translationAbortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    translationAbortControllerRef.current = controller;
 
     isTranslatingStreamRef.current = true;
     const from = speaker === 'host' ? inputLang.nameEn : outputLang.nameEn;
@@ -206,17 +234,23 @@ const App: React.FC = () => {
         } else {
           setTranscript(currentStreamed);
         }
-      });
+      }, controller.signal);
     } catch (e) {
-      console.error("Stream translation error:", e);
+      if ((e as any).name === 'AbortError') {
+        console.log("Translation stream aborted for newer results");
+      } else {
+        console.error("Stream translation error:", e);
+      }
     } finally {
-      isTranslatingStreamRef.current = false;
-      // If transcript has grown significantly during this stream, maybe trigger again?
+      if (translationAbortControllerRef.current === controller) {
+        isTranslatingStreamRef.current = false;
+        translationAbortControllerRef.current = null;
+      }
     }
   };
 
   // Extracted translation logic to support both Voice stop and specific Text submit
-  const handleTranslation = async (text: string, speaker: 'host' | 'guest') => {
+  const handleTranslation = async (text: string, speaker: 'host' | 'guest', showLoading = true) => {
     const speakerLang = speaker === 'host' ? inputLang : outputLang;
     const strings = UI_STRINGS[speakerLang.code] || UI_STRINGS.en;
     
@@ -232,7 +266,7 @@ const App: React.FC = () => {
       return;
     }
 
-    setIsProcessing(true);
+    if (showLoading) setIsProcessing(true);
     try {
       if (speaker === 'host') {
         const result = await translateText(text, inputLang.nameEn, outputLang.nameEn, outputLang.code);
@@ -245,7 +279,7 @@ const App: React.FC = () => {
     } catch (e) {
       setErrorMessage(strings.waiting + " (Error: " + (e instanceof Error ? e.message : String(e)) + ")");
     } finally {
-      setIsProcessing(false);
+      if (showLoading) setIsProcessing(false);
     }
   };
 
@@ -270,15 +304,7 @@ const App: React.FC = () => {
     // Don't clear activeSpeaker yet – keep UI stable to avoid flash/flicker.
     // It will be cleared atomically with the processing-start below.
     setPreparingSpeaker(null);
-
-    // Safety timeout to force-clear loading state if processing/ASR hangs
-    setTimeout(() => {
-      setIsProcessing((processing) => {
-        if (processing) return false;
-        return processing;
-      });
-    }, 5000);
-
+    
     if (processorRef.current) processorRef.current.disconnect();
     if (audioContextRef.current) audioContextRef.current.close();
     if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
@@ -286,24 +312,20 @@ const App: React.FC = () => {
       asrRef.current.stop();
     }
 
+    // IMMEDIATELY clear recording state
+    setActiveSpeaker(null);
+    setIsProcessing(false); // Clear processing state immediately to allow next recording
+    
     setTimeout(async () => {
-      // NOW clear activeSpeaker and set processing together so the UI
-      // transitions directly from "recording" → "processing" with no
-      // intermediate idle flash.
-      setActiveSpeaker(null);
-      setIsProcessing(true);
-
       // Use the ref for latest text
       const textToTranslate = transcriptRef.current.trim();
       if (currentSpeaker) {
         // Final corrective translation (batch) for highest accuracy
         isTranslatingStreamRef.current = true; // Block any further stream triggers
-        await handleTranslation(textToTranslate, currentSpeaker);
+        await handleTranslation(textToTranslate, currentSpeaker, false);
         isTranslatingStreamRef.current = false;
-      } else {
-        setIsProcessing(false);
       }
-    }, 100);
+    }, 50);
   };
 
   const hostStrings = UI_STRINGS[inputLang.code] || UI_STRINGS.en;
@@ -372,9 +394,9 @@ const App: React.FC = () => {
               </div>
             )}
 
-            {/* Translation Result Card */}
-            {(translation || isProcessing) && (
-              <div className="bg-primary rounded-[2rem] p-6 shadow-2xl animate-in slide-in-from-top-4 duration-500 relative overflow-hidden group">
+            {/* Translation Result Card Container with Slide-down logic */}
+            <div className={`transition-all duration-500 ease-in-out overflow-hidden ${hasShownSolo ? 'max-h-[600px] opacity-100 mb-4' : 'max-h-0 opacity-0 mb-0'}`}>
+              <div className={`bg-primary rounded-[2rem] p-6 relative overflow-hidden group ${!hasShownSolo && (translation || isProcessing) ? 'animate-float-in' : ''}`}>
                 <div className="absolute -left-8 -bottom-8 w-32 h-32 bg-accent/10 rounded-full blur-3xl"></div>
                 <div className="flex justify-between items-center mb-4 relative z-10">
                   <span className="text-white text-[10px] font-black uppercase tracking-[0.2em]">{strings.to}: {outputLang.name}</span>
@@ -383,7 +405,7 @@ const App: React.FC = () => {
                     onClick={() => handlePlayAudio(translation, outputLang.name)}
                     className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-all active:scale-95 disabled:opacity-30 shadow-lg"
                   >
-                    <span className={`material-icons-outlined text-lg ${isProcessing || isPlaying ? 'animate-spin' : ''}`}>
+                    <span className={`material-icons-outlined text-lg ${isProcessing || isPlaying ? 'animate-spin-reverse' : ''}`}>
                       {isProcessing || isPlaying ? 'sync' : 'volume_up'}
                     </span>
                   </button>
@@ -401,7 +423,7 @@ const App: React.FC = () => {
                   )}
                 </div>
               </div>
-            )}
+            </div>
 
             {/* Input & Controls Card */}
             <div className="bg-white dark:bg-slate-900 rounded-[2.5rem] pt-6 px-6 pb-6 shadow-xl border border-slate-50 dark:border-slate-800 relative overflow-hidden flex flex-col">
@@ -472,11 +494,14 @@ const App: React.FC = () => {
               <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-50">
                 <button
                   onClick={activeSpeaker ? stopRecording : () => startRecording('host')}
-                  disabled={isProcessing || (activeSpeaker === 'guest')}
-                  className={`w-20 h-20 rounded-full flex items-center justify-center transition-all active:scale-90 shadow-2xl ${activeSpeaker === 'host' ? 'bg-red-500 scale-105 shadow-red-500/40' : 'bg-primary hover:opacity-90 shadow-primary/40'} ${isProcessing ? 'cursor-wait' : (activeSpeaker === 'guest' ? 'opacity-50 grayscale cursor-not-allowed' : 'hover:scale-105')}`}
+                  disabled={(isProcessing && !activeSpeaker) || (activeSpeaker === 'guest')}
+                  className={`w-24 h-24 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-2xl 
+                    ${(activeSpeaker === 'host' || preparingSpeaker === 'host') ? 'bg-red-500 scale-110 shadow-red-500/40' : 
+                      (isProcessing ? 'bg-slate-400 cursor-wait scale-100' : 'bg-primary hover:scale-105 shadow-primary/40')} 
+                    ${activeSpeaker === 'guest' ? 'opacity-30 grayscale cursor-not-allowed' : 'opacity-100'}`}
                 >
-                  <span className={`material-icons-outlined text-4xl text-white ${isProcessing ? 'animate-spin' : ''}`}>
-                    {isProcessing ? 'sync' : (activeSpeaker === 'host' ? 'stop' : 'mic')}
+                  <span className={`material-icons-outlined text-4xl text-white ${((isProcessing || activeSpeaker) && !preparingSpeaker) ? 'animate-spin-reverse' : ''}`}>
+                    {(isProcessing || activeSpeaker || preparingSpeaker) ? 'sync' : 'mic'}
                   </span>
                 </button>
               </div>
@@ -509,21 +534,24 @@ const App: React.FC = () => {
               <div className="flex-grow w-full overflow-y-auto custom-scrollbar flex flex-col">
                 <div
                   className="my-auto mx-auto font-black text-primary dark:text-white leading-tight text-left break-words max-w-[90%] transition-all duration-300 text-2xl sm:text-4xl"
-                  dangerouslySetInnerHTML={{ __html: translation || (activeSpeaker === 'guest' ? guestStrings.listening : (activeSpeaker === 'host' ? guestStrings.waiting : "")) }}
+                  dangerouslySetInnerHTML={{ __html: translation || (preparingSpeaker === 'guest' ? guestStrings.preparing : (activeSpeaker === 'guest' ? guestStrings.listening : (activeSpeaker === 'host' ? guestStrings.waiting : ""))) }}
                 />
               </div>
 
               {/* Guest Controls */}
               <div className="mt-6 flex-shrink-0 z-30">
-                <button
-                  onClick={activeSpeaker ? stopRecording : () => startRecording('guest')}
-                  disabled={isProcessing || (activeSpeaker === 'host')}
-                  className={`w-20 h-20 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-95 ${activeSpeaker === 'guest' ? 'bg-red-500 scale-110 shadow-red-500/40' : 'bg-slate-100 dark:bg-slate-800 text-primary dark:text-white hover:bg-slate-200 dark:hover:bg-slate-700'} ${isProcessing ? 'cursor-wait' : (activeSpeaker === 'host' ? 'opacity-30 cursor-not-allowed' : '')}`}
-                >
-                  <span className={`material-icons-outlined text-4xl ${isProcessing ? 'animate-spin' : ''}`}>
-                    {isProcessing ? 'sync' : (activeSpeaker === 'guest' ? 'stop' : 'mic')}
-                  </span>
-                </button>
+                  <button
+                    onClick={activeSpeaker === 'guest' ? stopRecording : () => startRecording('guest')}
+                    disabled={(isProcessing && activeSpeaker !== 'guest') || (activeSpeaker === 'host')}
+                    className={`w-20 h-20 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg border-2 border-white
+                      ${(activeSpeaker === 'guest' || preparingSpeaker === 'guest') ? 'bg-red-500 scale-110 shadow-red-500/40' : 
+                        (isProcessing ? 'bg-slate-400 cursor-wait' : 'bg-primary hover:scale-105 shadow-primary/40')}
+                      ${activeSpeaker === 'host' ? 'opacity-30 grayscale cursor-not-allowed' : 'opacity-100'}`}
+                  >
+                    <span className={`material-icons-outlined text-4xl text-white ${((isProcessing || activeSpeaker === 'guest') && !preparingSpeaker) ? 'animate-spin-reverse' : ''}`}>
+                      {(isProcessing || activeSpeaker === 'guest' || preparingSpeaker === 'guest') ? 'sync' : 'mic'}
+                    </span>
+                  </button>
               </div>
 
               {translation && (
@@ -531,7 +559,7 @@ const App: React.FC = () => {
                   onClick={() => handlePlayAudio(translation, outputLang.name)}
                   className="absolute bottom-6 left-6 p-3 bg-slate-50 dark:bg-slate-800 rounded-full text-primary dark:text-white shadow-sm z-20"
                 >
-                  <span className={`material-icons-outlined ${isPlaying ? 'animate-spin' : ''}`}>
+                  <span className={`material-icons-outlined ${isPlaying ? 'animate-spin-reverse' : ''}`}>
                     {isPlaying ? 'sync' : 'volume_up'}
                   </span>
                 </button>
@@ -570,21 +598,24 @@ const App: React.FC = () => {
 
               <div className="flex-grow w-full overflow-y-auto custom-scrollbar flex flex-col">
                 <div className="my-auto mx-auto font-black text-primary dark:text-white leading-tight text-left break-words max-w-[90%] transition-all duration-300 text-2xl sm:text-4xl">
-                  {transcript || (activeSpeaker === 'host' ? hostStrings.listening : (activeSpeaker === 'guest' ? hostStrings.waiting : hostStrings.tapMicToSpeak))}
+                  {transcript || (preparingSpeaker === 'host' ? hostStrings.preparing : (activeSpeaker === 'host' ? hostStrings.listening : (activeSpeaker === 'guest' ? hostStrings.waiting : hostStrings.tapMicToSpeak)))}
                 </div>
               </div>
 
               {/* Host Controls */}
               <div className="mt-6 flex-shrink-0 z-30">
-                <button
-                  onClick={activeSpeaker ? stopRecording : () => startRecording('host')}
-                  disabled={isProcessing || (activeSpeaker === 'guest')}
-                  className={`w-24 h-24 rounded-full flex items-center justify-center shadow-2xl transition-all active:scale-90 ${activeSpeaker === 'host' ? 'bg-red-500 scale-110 shadow-red-500/40' : 'bg-primary hover:scale-105 shadow-primary/40'} ${isProcessing ? 'cursor-wait' : (activeSpeaker === 'guest' ? 'opacity-30 grayscale cursor-not-allowed' : '')}`}
-                >
-                  <span className={`material-icons-outlined text-5xl text-white ${isProcessing ? 'animate-spin' : ''}`}>
-                    {isProcessing ? 'sync' : (activeSpeaker === 'host' ? 'stop' : 'mic')}
-                  </span>
-                </button>
+                  <button
+                    onClick={activeSpeaker === 'host' ? stopRecording : () => startRecording('host')}
+                    disabled={(isProcessing && activeSpeaker !== 'host') || (activeSpeaker === 'guest')}
+                    className={`w-24 h-24 rounded-full flex items-center justify-center transition-all active:scale-95 shadow-lg border-2 border-white
+                      ${(activeSpeaker === 'host' || preparingSpeaker === 'host') ? 'bg-red-500 scale-110 shadow-red-500/40' : 
+                        (isProcessing ? 'bg-slate-400 cursor-wait' : 'bg-primary hover:scale-105 shadow-primary/40')}
+                      ${activeSpeaker === 'guest' ? 'opacity-30 grayscale cursor-not-allowed' : 'opacity-100'}`}
+                  >
+                    <span className={`material-icons-outlined text-5xl text-white ${((isProcessing || activeSpeaker === 'host') && !preparingSpeaker) ? 'animate-spin-reverse' : ''}`}>
+                      {(isProcessing || activeSpeaker === 'host' || preparingSpeaker === 'host') ? 'sync' : 'mic'}
+                    </span>
+                  </button>
               </div>
             </div>
           </div>

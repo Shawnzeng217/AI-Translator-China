@@ -56,6 +56,21 @@
     .dark .glass-card {
       background: rgba(255, 255, 255, 0.05);
     }
+
+    @keyframes floatIn {
+      0% { transform: translateY(20px); opacity: 0; }
+      100% { transform: translateY(0px); opacity: 1; }
+    }
+    .animate-float-in {
+      animation: floatIn 0.5s ease-out forwards;
+    }
+    @keyframes spin-reverse {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(-360deg); }
+    }
+    .animate-spin-reverse {
+      animation: spin-reverse 1s linear infinite;
+    }
   </style>
 
 </head>

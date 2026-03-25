@@ -42,8 +42,9 @@ export const translateTextStream = async (
   from: string, 
   to: string, 
   toCode: string,
-  onChunk: (chunk: string) => void
-): Promise<void> => {
+  onChunk: (chunk: string) => void,
+  signal?: AbortSignal
+) => {
   if (!DEEPSEEK_API_KEY) {
     onChunk("DeepSeek API key is missing.");
     return;
@@ -51,11 +52,12 @@ export const translateTextStream = async (
 
   try {
     const response = await fetch(DEEPSEEK_API_URL, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${DEEPSEEK_API_KEY}`,
       },
+      signal,
       body: JSON.stringify({
         model: "deepseek-chat",
         stream: true,
@@ -141,17 +143,17 @@ export const translateText = async (text: string, from: string, to: string, toCo
  * iFlytek Real-time ASR (IAT)
  */
 const IFLYTEK_LANG_MAP: Record<string, string> = {
-  'en': 'en_us',
-  'zh': 'zh_cn',
-  'ja': 'ja_jp',
-  'ko': 'ko_kr',
-  'th': 'th_th',
-  'vi': 'vi_vn',
-  'id': 'id_id',
-  'ms': 'ms_my',
-  'es': 'es_es',
-  'fr': 'fr_fr',
-  'de': 'de_de',
+  'en': 'en',
+  'zh': 'zh',
+  'ja': 'ja',
+  'ko': 'ko',
+  'th': 'th',
+  'vi': 'vi',
+  'id': 'id',
+  'ms': 'ms',
+  'es': 'es',
+  'fr': 'fr',
+  'de': 'de',
 };
 
 const IFLYTEK_VCN_MAP: Record<string, string> = {
@@ -175,7 +177,7 @@ export class DomesticASR {
   private onError?: (message: string, code: number) => void;
   private status: number = 0; // 0: first, 1: middle, 2: last
   private langCode: string = 'zh';
-  private segments: string[] = []; // Store stabilized and rolling segments
+  private results: Map<number, string> = new Map(); // Store results by sequence number (sn)
 
   constructor(onResult: (text: string) => void, onComplete?: () => void, onError?: (message: string, code: number) => void) {
     this.onResult = onResult;
@@ -186,8 +188,8 @@ export class DomesticASR {
   async start(langCode: string) {
     this.langCode = langCode;
     this.status = 0;
-    this.segments = []; 
-    const url = await getWebsocketUrl('wss://iat-api.xfyun.cn/v2/iat', IFLYTEK_API_KEY, IFLYTEK_API_SECRET);
+    this.results.clear();
+    const url = await getWebsocketUrl('wss://iat.cn-huabei-1.xf-yun.com/v1', IFLYTEK_API_KEY, IFLYTEK_API_SECRET);
     this.socket = new WebSocket(url);
 
     this.socket.onopen = () => {
@@ -196,33 +198,58 @@ export class DomesticASR {
 
     this.socket.onmessage = (e) => {
       const resp = JSON.parse(e.data);
-      if (resp.code !== 0) {
-        console.error(`ASR Error: ${resp.message} (Code: ${resp.code})`);
-        if (this.onError) this.onError(resp.message, resp.code);
+      
+      // New format uses header.code
+      const code = resp.header?.code ?? resp.code; 
+      if (code !== 0) {
+        const msg = resp.header?.message ?? resp.message;
+        console.error(`ASR Error: ${msg} (Code: ${code})`);
+        if (this.onError) this.onError(msg, code);
         return;
       }
-      if (resp.data && resp.data.result) {
-        const result = resp.data.result;
-        let text = "";
-        result.ws.forEach((w: any) => {
-          w.cw.forEach((c: any) => { text += c.w; });
-        });
-        
-        if (result.pgs === 'apd') {
-          this.segments.push(text);
-        } else if (result.pgs === 'rpl') {
-          const [start, end] = result.rg;
-          this.segments.splice(start - 1, end - start + 1, text);
-        } else {
-          // Standard case: just append if not using wpgs properly, 
-          // but we expect pgs to be present
-          this.segments.push(text);
+
+      if (resp.payload && resp.payload.result) {
+        const resultPayload = resp.payload.result;
+        try {
+          // The 'text' field is base64 encoded JSON (UTF-8)
+          const binaryString = atob(resultPayload.text);
+          const bytes = new Uint8Array(binaryString.length);
+          for (let i = 0; i < binaryString.length; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+          }
+          const decodedText = new TextDecoder().decode(bytes);
+          const resultJson = JSON.parse(decodedText);
+          
+          let text = "";
+          resultJson.ws.forEach((w: any) => {
+            w.cw.forEach((c: any) => { text += c.w; });
+          });
+
+          const sn = resultJson.sn;
+          const pgs = resultJson.pgs; // Check for partial results field
+
+          // iFlytek's wpgs/SLM returns partial results (pgs: apd or rpl)
+          // We update the results Map with the latest text for the given sn.
+          // In wpgs mode, rpl usually means the text for an existing sn is updated/corrected.
+          this.results.set(sn, text);
+
+          if (pgs === 'rpl') {
+            // Optional: If rg is present, we could clear intermediate sns if the engine 
+            // is replacing a larger range, but usually just updating the current sn is enough.
+          }
+
+          // Combine all results in order of sn
+          const sortedSns = Array.from(this.results.keys()).sort((a, b) => a - b);
+          const fullText = sortedSns.map(key => this.results.get(key)).join('');
+          
+          this.onResult(fullText);
+        } catch (err) {
+          console.error("Error parsing ASR result text", err);
         }
-        
-        this.onResult(this.segments.join(''));
       }
 
-      if (resp.data && resp.data.status === 2) {
+      const status = resp.header?.status ?? resp.data?.status;
+      if (status === 2) {
         console.log("ASR Server signaled end of input (VAD)");
         if (this.onComplete) this.onComplete();
       }
@@ -235,25 +262,38 @@ export class DomesticASR {
   sendAudio(data: Uint8Array) {
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) return;
 
-    const frame = {
-      common: this.status === 0 ? { app_id: IFLYTEK_APP_ID } : undefined,
-      business: this.status === 0 ? {
-        language: IFLYTEK_LANG_MAP[this.langCode] || "zh_cn",
-        domain: "iat",
-        accent: this.langCode === 'zh' ? "mandarin" : undefined,
-        vad_eos: 1000, 
-        dwa: "wpgs",    // Write Pre-Generated Stream for faster partials
-        pd: "1",        // Some versions of the API use this for partials
-        ptt: 1,         // Add punctuation
-        ent: "int8"     // Common engine for v2
-      } : undefined,
-      data: {
-        status: this.status,
-        format: "audio/L16;rate=16000",
-        encoding: "raw",
-        audio: btoa(String.fromCharCode(...data))
+    const frame: any = {
+      header: {
+        app_id: IFLYTEK_APP_ID,
+        status: this.status
+      },
+      payload: {
+        audio: {
+          encoding: "raw",
+          sample_rate: 16000,
+          status: this.status,
+          audio: btoa(String.fromCharCode(...data))
+        }
       }
     };
+
+    if (this.status === 0) {
+      frame.parameter = {
+        iat: {
+          domain: "slm",
+          language: "mul_cn",
+          accent: "mandarin",
+          ln: IFLYTEK_LANG_MAP[this.langCode] || "zh",
+          eos: 1000, // Reduced from 1500 to 1000 for even faster synchronization
+          dwa: "wpgs",    // Enable Write Pre-Generated Stream for real-time partials
+          result: {
+            encoding: "utf8",
+            compress: "raw",
+            format: "json"
+          }
+        }
+      };
+    }
 
     this.socket.send(JSON.stringify(frame));
     this.status = 1;
@@ -261,7 +301,10 @@ export class DomesticASR {
 
   stop() {
     if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-      this.socket.send(JSON.stringify({ data: { status: 2, audio: "", format: "audio/L16;rate=16000", encoding: "raw" } }));
+      this.socket.send(JSON.stringify({ 
+        header: { app_id: IFLYTEK_APP_ID, status: 2 },
+        payload: { audio: { status: 2, audio: "", encoding: "raw", sample_rate: 16000 } } 
+      }));
       this.status = 2;
     }
     setTimeout(() => {
