@@ -9,6 +9,9 @@ const converter = OpenCC.Converter({ from: 'hk', to: 'cn' });
 
 // Removed local UI_STRINGS as they are now in constants.ts
 
+const SUPPORTED_TTS_LANGUAGES = ['en', 'zh'];
+const isTtsSupported = (langCode: string) => SUPPORTED_TTS_LANGUAGES.includes(langCode);
+
 const App: React.FC = () => {
   const [mode, setMode] = useState<TranslationMode>(TranslationMode.SOLO);
   const [inputLang, setInputLang] = useState<Language>(LANGUAGES[0]);
@@ -400,15 +403,17 @@ const App: React.FC = () => {
                 <div className="absolute -left-8 -bottom-8 w-32 h-32 bg-accent/10 rounded-full blur-3xl"></div>
                 <div className="flex justify-between items-center mb-4 relative z-10">
                   <span className="text-white text-[10px] font-black uppercase tracking-[0.2em]">{strings.to}: {outputLang.name}</span>
-                  <button
-                    disabled={isProcessing || isPlaying || !translation}
-                    onClick={() => handlePlayAudio(translation, outputLang.name)}
-                    className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-all active:scale-95 disabled:opacity-30 shadow-lg"
-                  >
-                    <span className={`material-icons-outlined text-lg ${isProcessing || isPlaying ? 'animate-spin-reverse' : ''}`}>
-                      {isProcessing || isPlaying ? 'sync' : 'volume_up'}
-                    </span>
-                  </button>
+                  {isTtsSupported(outputLang.code) && (
+                    <button
+                      disabled={isProcessing || isPlaying || !translation}
+                      onClick={() => handlePlayAudio(translation, outputLang.code)}
+                      className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-all active:scale-95 disabled:opacity-30 shadow-lg"
+                    >
+                      <span className={`material-icons-outlined text-lg ${isProcessing || isPlaying ? 'animate-spin-reverse' : ''}`}>
+                        {isProcessing || isPlaying ? 'sync' : 'volume_up'}
+                      </span>
+                    </button>
+                  )}
                 </div>
                 <div className="relative z-10">
                   {isProcessing && !translation ? (
@@ -554,9 +559,9 @@ const App: React.FC = () => {
                   </button>
               </div>
 
-              {translation && (
+              {translation && isTtsSupported(outputLang.code) && (
                 <button
-                  onClick={() => handlePlayAudio(translation, outputLang.name)}
+                  onClick={() => handlePlayAudio(translation, outputLang.code)}
                   className="absolute bottom-6 left-6 p-3 bg-slate-50 dark:bg-slate-800 rounded-full text-primary dark:text-white shadow-sm z-20"
                 >
                   <span className={`material-icons-outlined ${isPlaying ? 'animate-spin-reverse' : ''}`}>
