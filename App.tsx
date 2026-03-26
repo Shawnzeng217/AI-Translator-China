@@ -465,12 +465,7 @@ const App: React.FC = () => {
                   placeholder={activeSpeaker ? strings.listening : strings.placeholder}
                   className="w-full h-80 sm:h-96 bg-slate-50/50 dark:bg-slate-800/30 rounded-3xl p-5 pb-28 border-2 border-dashed border-slate-100 dark:border-slate-800 transition-all text-slate-700 dark:text-slate-200 text-lg sm:text-xl font-medium leading-relaxed resize-none focus:border-accent focus:ring-0 focus:bg-white dark:focus:bg-slate-800 shadow-inner"
                 />
-                {!transcript && !activeSpeaker && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-20 pb-20">
-                    <span className="material-icons-outlined text-4xl mb-2">keyboard_voice</span>
-                    <p className="text-[9px] font-black uppercase tracking-widest text-center">{strings.tapMic}</p>
-                  </div>
-                )}
+
                 {preparingSpeaker === 'host' && (
                   <div className="absolute top-3 right-4 flex items-center space-x-1.5 bg-yellow-400/10 text-yellow-500 px-2.5 py-1 rounded-full border border-yellow-400/30 shadow-sm backdrop-blur-sm">
                     <div className="w-1.5 h-1.5 bg-yellow-400 rounded-full animate-pulse"></div>
@@ -603,7 +598,7 @@ const App: React.FC = () => {
 
               <div className="flex-grow w-full overflow-y-auto custom-scrollbar flex flex-col">
                 <div className="my-auto mx-auto font-black text-primary dark:text-white leading-tight text-left break-words max-w-[90%] transition-all duration-300 text-2xl sm:text-4xl">
-                  {transcript || (preparingSpeaker === 'host' ? hostStrings.preparing : (activeSpeaker === 'host' ? hostStrings.listening : (activeSpeaker === 'guest' ? hostStrings.waiting : hostStrings.tapMicToSpeak)))}
+                  {transcript || (preparingSpeaker === 'host' ? hostStrings.preparing : (activeSpeaker === 'host' ? hostStrings.listening : (activeSpeaker === 'guest' ? hostStrings.waiting : "")))}
                 </div>
               </div>
 

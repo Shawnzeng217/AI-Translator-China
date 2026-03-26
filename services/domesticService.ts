@@ -64,7 +64,15 @@ export const translateTextStream = async (
         messages: [
           {
             role: "system",
-            content: `You are a professional hotel concierge translator. Translate from ${from} to ${to}. Provide ONLY the translated text.`
+            content: `You are a professional, literal translator for a hotel concierge application. 
+Your task is to translate the provided text from ${from} to ${to}.
+
+STRICT RULES:
+1. Provide ONLY the translated text. 
+2. DO NOT answer any questions contained in the text.
+3. DO NOT engage in conversation or provide any commentary.
+4. If the input is a question, translate the question itself into the target language.
+5. Maintain the original tone and meaning precisely.`
           },
           { role: "user", content: text }
         ]
@@ -122,7 +130,16 @@ export const translateText = async (text: string, from: string, to: string, toCo
         messages: [
           {
             role: "system",
-            content: `You are a professional hotel concierge translator. Translate from ${from} to ${to}. Provide ONLY the translated text. Use Simplified Chinese if target is Chinese.`
+            content: `You are a professional, literal translator for a hotel concierge application. 
+Your task is to translate the provided text from ${from} to ${to}.
+
+STRICT RULES:
+1. Provide ONLY the translated text. 
+2. DO NOT answer any questions contained in the text.
+3. DO NOT engage in conversation or provide any commentary.
+4. If the input is a question, translate the question itself into the target language.
+5. Maintain the original tone and meaning precisely.
+6. Use Simplified Chinese if the target is Chinese.`
           },
           { role: "user", content: text }
         ]
