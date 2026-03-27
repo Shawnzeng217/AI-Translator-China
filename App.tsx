@@ -3,6 +3,7 @@ import { TranslationMode, Language } from './types';
 import { LANGUAGES, UI_STRINGS } from './constants';
 import { translateText, translateTextStream, generateSpeech, playPCM, DomesticASR } from './services/domesticService';
 import * as OpenCC from 'opencc-js';
+import { trackPageView } from './utils/adobeTracking';
 
 // Initialize converter: Traditional (hk/tw) -> Simplified (cn)
 const converter = OpenCC.Converter({ from: 'hk', to: 'cn' });
@@ -49,6 +50,11 @@ const App: React.FC = () => {
   const isTranslatingStreamRef = useRef<boolean>(false);
   const translationAbortControllerRef = useRef<AbortController | null>(null);
   const lastTranslatedLengthRef = useRef<number>(0);
+
+  // Send page view event when mode changes
+  useEffect(() => {
+    trackPageView('AI Translator', inputLang.code);
+  }, [mode, inputLang.code]);
 
   // Auto-scroll textarea as text arrives
   useEffect(() => {
